@@ -1,0 +1,65 @@
+services:
+  web:
+    build: ./env/.
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./app:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - vulnerability_assessment
+    depends_on:
+      - db
+      - redis
+    env_file: 
+      - ./env/.env
+
+  db:
+    image: postgres:15
+    env_file: 
+      - ./env/.env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/conf:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      retries: 5
+    networks:
+      - vulnerability_assessment
+
+  redis:
+    image: redis:alpine
+    # ports:
+    #   - "6379:6379"
+    networks:
+      - vulnerability_assessment
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+      timeout: 5s
+
+  celery:
+    build: ./env/.
+    command: celery -A vulnerability_assessment worker --loglevel=info
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+    networks:
+      - vulnerability_assessment
+    env_file:
+      - ./env/.env
+
+volumes:
+  postgres_data:
+    driver_opts:
+      type: none
+      device: ./db/data
+      o: bind
+
+networks:
+  vulnerability_assessment:
+    driver: bridge
